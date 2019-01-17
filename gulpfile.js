@@ -13,12 +13,17 @@ var concat = require('gulp-concat')
 var pug = require('gulp-pug')
 var del = require('del')
 
+//babel
+const babel = require('gulp-babel')
+
 // livereload
-var connect = require('gulp-connect')
+var browserSync = require('browser-sync').create()
+var reload      = browserSync.reload
+var portscanner = require('portscanner')
+var liveServerPortArray = [3000, 3033, 4000, 5500, 8880, 10000, 9900]
 
 var options = {
     pluginName: 'isiaLightbox',
-    liveServerPort: 3000,
     usePug: false,
     useThemes: true
 }
@@ -32,8 +37,8 @@ var dir = {
   demoDir: 'demo'
 }
 
-/*
- * clean up 
+/**
+ * Clean up 
  */
 gulp.task('clean', function () {
   return del([
@@ -49,23 +54,26 @@ gulp.task('clean', function () {
   ]);
 });
 
-/*
+/**
  * server
  */
 gulp.task('connectDev', function () {
-    connect.server({
-      name: 'Dev Server',
-      root: [dir.demoDir + '/public'],
-      port: options.liveServerPort,
-      livereload: true
+  portscanner.findAPortNotInUse(liveServerPortArray, '127.0.0.1').then(function(port) {
+    browserSync.init({
+      server: {
+        baseDir: [dir.demoDir + '/public']
+      },
+      port: port
     })
+  })
 })
 
-/*
- * source
+/**
+ * Set up CSS
  */
-gulp.task(dir.srcDir + '_sass', function () {
-  console.log(dir.srcDir)
+
+gulp.task('set_up_css', function () {
+  console.log('Compiling main Sass')
   gulp.src([dir.srcDir + '/sass/**/*.scss', '!' + dir.srcDir + '/sass/themes/**/*'])
     .pipe(plumber({
       handleError: function (err) {
@@ -77,10 +85,119 @@ gulp.task(dir.srcDir + '_sass', function () {
     .pipe(autoPrefixer())
     .pipe(cssComb())
     .pipe(cmq({log: true}))
-    .pipe(concat(options.pluginName + '.css'))
+    .pipe(concat({path: options.pluginName + '.css', stat: { mode: 0666 }}))
     .pipe(gulp.dest(dir.srcDir + '/css'))
+    .on('end', function () {
+
+      console.log('Main Sass compiled successfully')
+      console.log('Concatenating source CSS, minifying and moving to dist folder')
+
+      gulp.src([dir.srcDir + '/css/**/*.css', '!' + dir.srcDir + '/css/themes/**/*'])
+        .pipe(plumber({
+          handleError: function (err) {
+            console.log(err)
+            this.emit('end')
+          }
+        }))
+        .pipe(concat(options.pluginName + '.css'))
+        .pipe(gulp.dest(dir.distDir))
+        .pipe(rename({
+          suffix: '.min'
+        }))
+        .pipe(cleanCss())
+        .pipe(gulp.dest(dir.distDir))
+        .on('end', function () {
+
+          console.log('Successfully concatenated source CSS, minified and moved to dist folder')
+          if (options.useThemes) {
+            console.log('Compiling Theme Sass')
+            gulp.src([dir.themesDir + '/**/*.scss'])
+              .pipe(plumber({
+                handleError: function (err) {
+                  console.log(err)
+                  this.emit('end')
+                }
+              }))
+              .pipe(sass())
+              .pipe(autoPrefixer())
+              .pipe(cssComb())
+              .pipe(cmq({log: true}))
+              .pipe(gulp.dest(dir.distDir + '/themes'))
+              .pipe(rename({
+                prefix: options.pluginName + '.',
+                suffix: '-theme.min'
+              }))
+              .pipe(cleanCss())
+              .pipe(gulp.dest(dir.distDir + '/themes'))
+              .on('end', function () {
+
+                console.log('Successfully compiled Theme Sass')
+                console.log('Compiling Demo Sass')
+
+                gulp.src([dir.demoDir + '/src/sass/**/*.scss'])
+                  .pipe(plumber({
+                    handleError: function (err) {
+                      console.log(err)
+                      this.emit('end')
+                    }
+                  }))
+                  .pipe(sass())
+                  .pipe(autoPrefixer())
+                  .pipe(cssComb())
+                  .pipe(cmq({log: true}))
+                  .pipe(concat(options.pluginName + '.' + dir.demoDir + '.css'))
+                  .pipe(gulp.dest(dir.demoDir + '/src/css'))
+                  .pipe(rename({
+                    suffix: '.min'
+                  }))
+                  .pipe(cleanCss())
+                  .pipe(gulp.dest(dir.demoDir + '/src/css'))
+                  .on('end', function(){
+
+                    console.log('Successfully compiled Demo Sass')
+                    console.log('Moving Demo CSS to Demo public dir')
+
+                    gulp.src([dir.demoDir + '/src/css/**/*.*.css'])
+                      .pipe(plumber({
+                        handleError: function (err) {
+                          console.log(err)
+                          this.emit('end')
+                        }
+                      }))
+                      .pipe(gulp.dest(dir.demoDir + '/public/css'))
+                      .on('end', function(){
+
+                        console.log('Successfully Moved Demo CSS to Demo public dir')
+                        console.log('Copying Main CSS from dist folder to Demo public dir')
+
+                        gulp.src([dir.distDir + '/**/*.css'],{'base' : './' + dir.distDir})
+                          .pipe(plumber({
+                            handleError: function (err) {
+                              console.log(err)
+                              this.emit('end')
+                            }
+                          }))
+                          .pipe(gulp.dest(dir.demoDir + '/public/css'))
+                          .on('end', function () {
+
+                            console.log('Successfully copied Main CSS from dist folder to Demo public dir')
+                            console.log('Completed CSS Set Up!')
+
+                          })
+
+                      })
+                  })
+
+              })
+          } else {
+            console.log('Completed CSS Set Up!')
+          }
+        })
+    })
 })
-gulp.task(dir.srcDir + '_js', function () {
+
+gulp.task('set_up_js', function(){
+  console.log('Compiling, minifying and moving source JS')
   gulp.src([dir.srcDir + '/js/**/*.js'])
     .pipe(plumber({
       handleError: function (err) {
@@ -95,101 +212,74 @@ gulp.task(dir.srcDir + '_js', function () {
     }))
     .pipe(terser())
     .pipe(gulp.dest(dir.distDir))
-})
-gulp.task(dir.srcDir + '_move_css', [dir.srcDir + '_sass'], function() {
-    gulp.src([dir.srcDir + '/css/**/*.css', '!' + dir.srcDir + '/css/themes/**/*'])
-      .pipe(concat(options.pluginName + '.css'))
-      .pipe(rename({
-        suffix: '.min'
-      }))
-      .pipe(cleanCss())
-      .pipe(gulp.dest(dir.distDir))
-})
-gulp.task(dir.srcDir + '_move_uncompressed_css', [dir.srcDir + '_move_css'], function() {
-  gulp.src([dir.srcDir + '/css/**/*.css', '!' + dir.srcDir + '/css/themes/**/*'])
-    .pipe(concat(options.pluginName + '.css'))
-    .pipe(gulp.dest(dir.distDir))
+    .on('end', function () {
+
+      console.log('Successfully compiled, minified and moved source JS')
+      console.log('Transpiling ES6 to ES6')
+
+      gulp.src([dir.distDir + '/' + options.pluginName + '.js'])
+        .pipe(plumber({
+          handleError: function (err) {
+            console.log(err)
+            this.emit('end')
+          }
+        }))
+        .pipe(babel({
+            presets: ['@babel/env']
+        }))
+        .pipe(rename({
+          suffix: '.es5'
+        }))
+        .pipe(gulp.dest(dir.distDir))
+        .pipe(rename({
+          suffix: '.min'
+        }))
+        .pipe(terser())
+        .pipe(gulp.dest(dir.distDir))
+        .on('end', function(){
+
+          console.log('Successfully Transpiled ES6 to ES6')
+          console.log('Compiling, minifying and moving demo JS')
+
+          gulp.src([dir.demoDir + '/src/js/**/*.js'])
+            .pipe(plumber({
+              handleError: function (err) {
+                console.log(err)
+                this.emit('end')
+              }
+            }))
+            .pipe(concat(options.pluginName + '.' + dir.demoDir + '.js'))
+            .pipe(gulp.dest(dir.demoDir + '/public/js'))
+            .pipe(rename({
+              suffix: '.min'
+            }))
+            .pipe(terser())
+            .pipe(gulp.dest(dir.demoDir + '/public/js'))
+            .on('end', function () {
+              
+              console.log('Successfully compiled, minified and moved demo JS')
+              console.log('Move dist JS to demo public dir')
+
+              gulp.src([dir.distDir + '/**/*.js'])
+                .pipe(plumber({
+                  handleError: function (err) {
+                    console.log(err)
+                    this.emit('end')
+                  }
+                }))
+                .pipe(gulp.dest(dir.demoDir + '/public/js'))
+                .on('end', function(){
+                  console.log('Successfully moved dist JS to demo public dir')
+                })
+
+            })          
+        })
+
+    })
 })
 
-/*
- * themes
- */
-gulp.task(dir.themesLabel + '_sass', [dir.srcDir + '_move_uncompressed_css'], function () {
-  if (options.useThemes) {
-    gulp.src([dir.themesDir + '/**/*.scss'])
-      .pipe(plumber({
-        handleError: function (err) {
-          console.log(err)
-          this.emit('end')
-        }
-      }))
-      .pipe(sass())
-      .pipe(autoPrefixer())
-      .pipe(cssComb())
-      .pipe(cmq({log: true}))
-      .pipe(gulp.dest(dir.srcDir + '/css/themes'))
-      .pipe(rename({
-        prefix: options.pluginName + '.',
-        suffix: '-theme.min'
-      }))
-      .pipe(cleanCss())
-      .pipe(gulp.dest(dir.distDir + '/themes'))    
-  }
-})
 
-/*
- * demo
- */
-gulp.task(dir.demoDir + '_sass', function () {
-  gulp.src([dir.demoDir + '/src/sass/**/*.scss'])
-    .pipe(plumber({
-      handleError: function (err) {
-        console.log(err)
-        this.emit('end')
-      }
-    }))
-    .pipe(sass())
-    .pipe(autoPrefixer())
-    .pipe(cssComb())
-    .pipe(cmq({log: true}))
-    .pipe(concat(options.pluginName + '.' + dir.demoDir + '.css'))
-    .pipe(gulp.dest(dir.demoDir + '/src/css'))
-    .pipe(rename({
-      suffix: '.min'
-    }))
-    .pipe(cleanCss())
-    .pipe(gulp.dest(dir.demoDir + '/src/css'))
-    .pipe(connect.reload());
-})
-gulp.task(dir.demoDir + '_js', function () {
-  gulp.src([dir.demoDir + '/src/js/**/*.js'])
-    .pipe(plumber({
-      handleError: function (err) {
-        console.log(err)
-        this.emit('end')
-      }
-    }))
-    .pipe(concat(options.pluginName + '.' + dir.demoDir + '.js'))
-    .pipe(gulp.dest(dir.demoDir + '/public/js'))
-    .pipe(rename({
-      suffix: '.min'
-    }))
-    .pipe(terser())
-    .pipe(gulp.dest(dir.demoDir + '/public/js'))
-    .pipe(connect.reload());
-})
-gulp.task(dir.demoDir + '_move_css', function () {
-  gulp.src([dir.demoDir + '/src/css/**/*.*.css'])
-    .pipe(plumber({
-      handleError: function (err) {
-        console.log(err)
-        this.emit('end')
-      }
-    }))
-    .pipe(gulp.dest(dir.demoDir + '/public/css'))
-    .pipe(connect.reload());
-})
-gulp.task(dir.demoDir + '_pug', function () {
+gulp.task('set_up_demo_pug', function () {
   if (options.usePug) {
     gulp.src([dir.demoDir + '/src/html/*.pug'])
       .pipe(plumber({
@@ -200,96 +290,26 @@ gulp.task(dir.demoDir + '_pug', function () {
       }))
       .pipe(pug())
       .pipe(gulp.dest(dir.demoDir + '/public'))
-      .pipe(connect.reload());
   }
-})  
-
-
-
-/*
- * Demo Set up
- */
-
-// Move Base JS to demo
-gulp.task('move_js', [dir.srcDir + '_js'],  function () {
-  gulp.src([dir.distDir + '/**/*.js'])
-    .pipe(plumber({
-      handleError: function (err) {
-        console.log(err)
-        this.emit('end')
-      }
-    }))
-    .pipe(gulp.dest(dir.demoDir + '/public/js'))
-    .pipe(connect.reload());
-})
-
-// Move Jquery
-gulp.task('move_jquery', function () {
-  gulp.src(['node_modules/jquery/dist/jquery.min.js'])
-    .pipe(plumber({
-      handleError: function (err) {
-        console.log(err)
-        this.emit('end')
-      }
-    }))
-    .pipe(gulp.dest(dir.demoDir + '/public/js'))
-    .pipe(connect.reload());
-})
-
-// Move Base CSS to demo
-gulp.task('move_css', [dir.themesLabel + '_sass'], function () {
-  gulp.src([dir.distDir + '/**/*.css'],{'base' : './' + dir.distDir})
-    .pipe(plumber({
-      handleError: function (err) {
-        console.log(err)
-        this.emit('end')
-      }
-    }))
-    .pipe(gulp.dest(dir.demoDir + '/public/css'))
-    .pipe(connect.reload());
 })
 
 gulp.task('default',
-  [ dir.srcDir + '_js',
-    //dir.srcDir + '_sass',
-    //dir.srcDir + '_move_css',
-    //dir.srcDir + '_move_uncompressed_css',
-    //dir.themesLabel + '_sass',
-    dir.demoDir + '_js',
-    dir.demoDir + '_sass',
-    dir.demoDir + '_pug',
-    dir.demoDir + '_move_css',
-    //'move_js',
-    'move_jquery',
-    'move_css',
-    'connectDev'],
-    function () {
-    /*
-     * source
-     */
+  [
+  'set_up_css',
+  'set_up_js',
+  'set_up_demo_pug',
+  'connectDev'
+  ],
+  function () {
 
-    gulp.watch(dir.srcDir + '/js/**/*.js', [dir.srcDir + '_js'])
-    gulp.watch(dir.srcDir + '/sass/**/*.scss', [dir.srcDir + '_sass'])
-    gulp.watch(dir.srcDir + '/css/**/*.css', [dir.srcDir + '_move_css'])
-    gulp.watch(dir.srcDir + '/css/**/*.css', [dir.srcDir + '_move_uncompressed_css'])
+    gulp.watch(dir.srcDir + '/css/**/*.css', ['set_up_css'])
+    gulp.watch(dir.srcDir + '/sass/**/*.scss', ['set_up_css'])
+    gulp.watch(dir.demoDir + '/src/sass/**/*.scss', ['set_up_css'])
 
-    /*
-     * themes
-     */
-    gulp.watch(dir.themesDir + '/**/*.scss', [dir.themesLabel + '_sass'])
+    gulp.watch(dir.srcDir + '/js/**/*.js', ['set_up_js'])
+    gulp.watch(dir.demoDir + '/src/js/**/*.js', ['set_up_js'])
 
-    /*
-     * demo
-     */
-    gulp.watch(dir.demoDir + '/src/js/**/*.js', [dir.demoDir + '_js'])
-    gulp.watch(dir.demoDir + '/src/sass/**/*.scss', [dir.demoDir + '_sass'])
-    gulp.watch(dir.demoDir + '/src/html/**/*.pug', [dir.demoDir + '_pug'])
-    gulp.watch(dir.demoDir + '/src/css/**/*.css', [dir.demoDir + '_move_css'])
+    gulp.watch(dir.demoDir + '/public/**/*.*', reload)
 
-    /*
-     * Demo Set up
-     */
-    gulp.watch(dir.distDir + '/**/*.js', ['move_js'])
-    gulp.watch(dir.distDir + '/**/*.css', ['move_css'])
-    gulp.watch('node_modules/jquery/dist/jquery.min.js', ['move_jquery'])
-  })
+  }
+)

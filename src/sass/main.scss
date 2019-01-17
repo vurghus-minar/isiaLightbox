@@ -7,7 +7,7 @@
     width: 60%;
     max-height: 80%;
     overflow: hidden;
-    position: absolute;
+    position: fixed;
     right: 20%;
     left: 20%;
     top: 10%;
@@ -17,16 +17,21 @@
     //border: 1px solid #ddd;
     /* offset-x | offset-y | blur-radius | color */
     box-shadow: 4px 4px 9px rgba(0, 0, 0, 0.7);
-    z-index: 999999;
+    z-index: 99999999;
+    box-sizing: initial;
 
     .isiaLightbox-header {
       padding: 10px 20px 10px;
       position: relative;
       h3 {
-        font-size: 16px;
+        font-size: 20px;
+        font-weight: bold;
+        color: #444444;
         margin: 5px 0;
+        line-height: 1;
+        letter-spacing: initial;
         & > span {
-          font-size: 12px;
+          font-size: 16px;
           margin-left: 10px;
           display: inline-block;
           color: #999;
@@ -50,23 +55,42 @@
 
     .isiaLightbox-content {
       padding: 10px 20px 20px;
+      p {
+        color: #444444;
+        font-size: 14px;
+        margin: 0 0 10px;
+      }
     }
 
     .isiaLightbox-footer {
-      padding: 10px 20px 10px;
+      padding: 20px;
       background-color: #ccc;
+    }
+
+    p {
+      color: #444444;
+      font-size: 14px;
+      margin: 0;
     }
   }
 
   .isiaLightbox-overlay {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     width: 0%;
     height: 0%;
-    background-color: rgba(0, 0, 0, 0.7);
+    background-color: rgba(0, 0, 0, 0.9);
     display: none;
     opacity: 0;
+    z-index: 9999999;
+  }
+
+  .isiaLightbox-active {
+    overflow: hidden;
+    position: fixed;
+    left: 0;
+    right: 0;
   }
 }
 
@@ -92,16 +116,12 @@
 }
 
 .isiaLightbox-overlay {
-  //Overlay Fade Out
-  &.overlayFadeOut {
+  &.overlayHide {
     opacity: 0;
-    animation: fadeOut 1s linear;
   }
 
-  //Overlay Fade In
-  &.overlayFadeIn {
+  &.overlayShow {
     opacity: 1;
-    animation: fadeIn 0.8s linear;
   }
 }
 

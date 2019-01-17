@@ -14,5 +14,14 @@ a {
   color: white;
   border: 2px solid white;
   padding: 10px;
-  z-index: 99999;
+  z-index: 99999999;
 }
+
+#main .spotlight .content {
+  max-width: 100%;
+  pre {
+    max-height: 300px;
+  }
+}
+
+

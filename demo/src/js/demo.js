@@ -24,7 +24,6 @@ document.getElementById('open-lightbox').addEventListener('click', function(){
     subtitle: 'TEST',
     theme: '',
     footerContent: '<a href="#" id="close-lightbox">API CLOSE</a>',
-    overlay: true,
     apiOnBeforeTemplateInit: function () {
       isiaLightbox.setContent('<iframe width="560" height="315" src="https://www.youtube.com/embed/jDWwsRK73lY" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>')
     },
@@ -53,6 +52,9 @@ document.getElementById('open-lightbox').addEventListener('click', function(){
 })
 
 // Close Test
-document.getElementById('close2-lightbox').addEventListener('click', function(){
-    isiaLightbox.close()
+document.getElementById('close2-lightbox').addEventListener('click', function(event){
+  event.preventDefault()
+  isiaLightbox.close()
 })
+
+

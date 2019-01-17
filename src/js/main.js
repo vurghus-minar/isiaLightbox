@@ -24,7 +24,6 @@
     animateOutClass: 'lightboxFadeOut',
     animateInTimeOut: 500,
     animateOutTimeOut: 1000,
-    allowedCloseMethods: ['overlay-click', 'close-button-click', 'keyboard-escape-press'],
     onBeforeTemplateInit: null,
     onOpen: null,
     onClose: null,
@@ -32,9 +31,11 @@
     onBeforeClose: null
   }
 
-  let settings, lightbox, overlayElement, showOverlay, content, footerContent
+  let settings, lightbox, overlayElement, content, footerContent, allowedCloseMethods
   
   let apiOnBeforeOpen, apiOnAfterOpen, apiOnBeforeClose, apiOnAfterClose, apiOnBeforeTemplateInit
+
+  let currentScrollPosition
 
   function _extend () {
     for (let i = 1; i < arguments.length; i++) {
@@ -67,12 +68,10 @@
 
   function _drawLightbox (lightboxParams) {
 
-    if(lightboxParams.overlay){
-      showOverlay = lightboxParams.overlay
-    }
-
     if(lightboxParams.footerContent){
       footerContent = lightboxParams.footerContent
+    } else {
+      footerContent = ''
     }
 
     apiOnBeforeTemplateInit = lightboxParams.apiOnBeforeTemplateInit || null
@@ -80,6 +79,12 @@
     apiOnAfterOpen = lightboxParams.apiOnAfterOpen || null
     apiOnBeforeClose = lightboxParams.apiOnBeforeClose || null
     apiOnAfterClose = lightboxParams.apiOnAfterClose || null
+
+    if(lightboxParams.allowedCloseMethods){
+      allowedCloseMethods = JSON.parse(lightboxParams.allowedCloseMethods)
+    } else {
+      allowedCloseMethods = ['overlay-click', 'close-button-click', 'keyboard-escape-press']
+    }
 
     const lightBoxTemplate = _buildLightboxTemplate(lightboxParams)
 
@@ -93,18 +98,18 @@
 
     _animateInLightbox()
 
-    if(settings.allowedCloseMethods.indexOf('overlay-click') > -1){
+    if(allowedCloseMethods.indexOf('overlay-click') > -1){
       overlayElement.addEventListener('click', function () {
         _animateOutLightbox()
       })      
     }
-    if(settings.allowedCloseMethods.indexOf('close-button-click') > -1){
+    if(allowedCloseMethods.indexOf('close-button-click') > -1){
       const lightboxCloseBtn = document.getElementsByClassName('isiaLightboxClose')
       lightboxCloseBtn[0].addEventListener('click', function () {
         _animateOutLightbox()
       })      
     }
-    if(settings.allowedCloseMethods.indexOf('keyboard-escape-press') > -1){
+    if(allowedCloseMethods.indexOf('keyboard-escape-press') > -1){
       window.addEventListener('keydown', function (e) {
         if (e.keyCode === 27) {
           _animateOutLightbox()
@@ -125,8 +130,9 @@
       trigger[i].addEventListener('click', e => {
         e.preventDefault()
         const lightboxTriggerOptions = trigger[i].dataset.src.split(',')
-        showOverlay = JSON.parse(trigger[i].dataset.overlay || true)
 
+        currentScrollPosition = document.documentElement.scrollTop
+        
         let lightboxParams
         switch (lightboxTriggerOptions[0]) {
           case 'next':
@@ -147,7 +153,7 @@
   }
 
   function _buildLightboxTemplate(lightboxParams){
-    let id, title, subtitle, theme, closeBtn
+    let id, title, subtitle, theme, closeBtn, footer
 
     if (typeof settings.onBeforeTemplateInit === 'function') {
       settings.onBeforeTemplateInit.call(this)
@@ -163,6 +169,8 @@
 
     if(lightboxParams.title && lightboxParams.title !== ''){
       title = `<h3>${lightboxParams.title}${subtitle}</h3>`
+    } else {
+      title = ''
     }
 
     id = `${lightboxParams.id}`
@@ -176,22 +184,36 @@
     if (theme === ' undefined') {
       theme = ''
     }
-    
+
+    if(footerContent === ''){
+      footer = ''
+    } else {
+      footer = `<div class="isiaLightbox-footer">${footerContent}</div>`
+    }
     
     closeBtn = `<div class="isiaLightboxClose close"><img class="close-icon" src="${settings.closeIconImg}" /></div>`
 
-    return `<div ${id} class="isiaLightbox${theme}"><div class="isiaLightbox-header">${title}${closeBtn}</div><div class="isiaLightbox-content">${content}</div><div class="isiaLightbox-footer">${footerContent}</div></div>`
+    return `<div ${id} class="isiaLightbox${theme}"><div class="isiaLightbox-header">${title}${closeBtn}</div><div class="isiaLightbox-content">${content}</div>${footer}</div>`
   
   }
 
   function _adjustLightboxContentHeight(){
 
-      let lightboxContent = document.getElementsByClassName('isiaLightbox-content')[0]
-      let lightboxHeader = document.getElementsByClassName('isiaLightbox-header')[0]
-      let lightboxFooter = document.getElementsByClassName('isiaLightbox-footer')[0]
-
-      lightboxContent.style.height = (lightbox.clientHeight - lightboxFooter.clientHeight - lightboxHeader.clientHeight - parseInt((window.getComputedStyle(lightboxContent).getPropertyValue('padding-top')).replace('px', '')) - parseInt((window.getComputedStyle(lightboxContent).getPropertyValue('padding-bottom')).replace('px', ''))) + 'px'
+      const lightboxContent = document.getElementsByClassName('isiaLightbox-content')[0]
+      const lightboxHeaderHeight = document.getElementsByClassName('isiaLightbox-header')[0].clientHeight
+      
+      const lightboxFooter = document.getElementsByClassName('isiaLightbox-footer')[0]
+      let  lightboxFooterHeight
+      if(lightboxFooter){
+        lightboxFooterHeight = lightboxFooter.clientHeight
+      } else {
+        lightboxFooterHeight = 0
+      }
+      
+      lightboxContent.style.height = (lightbox.clientHeight - lightboxFooterHeight - lightboxHeaderHeight - parseInt((window.getComputedStyle(lightboxContent).getPropertyValue('padding-top')).replace('px', '')) - parseInt((window.getComputedStyle(lightboxContent).getPropertyValue('padding-bottom')).replace('px', ''))) + 'px'
       lightboxContent.style.overflowY = 'auto'
+
+      _scrollLightboxContent(lightboxContent)
   }
 
   function _animateInLightbox () {
@@ -208,13 +230,20 @@
 
     let timeout = 0
 
-    if (showOverlay) {
-      overlayElement.style.display = 'block'
-      overlayElement.style.height = '100%'
-      overlayElement.style.width = '100%'
-      overlayElement.classList.add('overlayFadeIn')
-      timeout = settings.animateInTimeOut
-    }
+    overlayElement.style.display = 'block'
+    overlayElement.style.height = '100%'
+    overlayElement.style.width = '100%'
+    overlayElement.classList.add('overlayShow')
+    body.style.top = `-${currentScrollPosition}px`
+
+    body.classList.add('isiaLightbox-active')
+
+    
+
+    _disableScroll()
+
+    timeout = settings.animateInTimeOut
+
     setTimeout(function () {
       lightbox.classList.add(settings.animateInClass)
     }, timeout)
@@ -240,22 +269,21 @@
     }
 
     lightbox.classList.remove(settings.animateInClass)
-    lightbox.classList.add(settings.animateOutClass)
     
     let timeout = settings.animateOutTimeOut
     
-    if (showOverlay) {
-      overlayElement.classList.remove('overlayFadeIn')
-      overlayElement.classList.add('overlayFadeOut')
-    }
+    overlayElement.classList.remove('overlayShow')
+    overlayElement.classList.add('overlayHide')
+    body.classList.remove('isiaLightbox-active')
+    document.documentElement.scrollTop = currentScrollPosition
+    body.style.top = null
+    overlayElement.style.display = 'none'
+    overlayElement.style.height = '0%'
+    overlayElement.style.width = '0%'
 
+    _enableScroll()
+    
     setTimeout(function () {
-      if (showOverlay) {
-        overlayElement.style.display = 'none'
-        overlayElement.style.height = '0%'
-        overlayElement.style.width = '0%'
-        overlayElement.classList.remove('overlayFadeOut')
-      }
       lightbox.remove()
     }, timeout)
 
@@ -267,6 +295,60 @@
       apiOnAfterClose.call(this)
     }
 
+  }
+
+  function _preventDefaultScroll(e) {
+    e = e || window.event;
+    if (e.preventDefault)
+        e.preventDefault();
+    e.returnValue = false;  
+  }
+
+  function _preventDefaultForScrollKeys(e) {
+    // left: 37, up: 38, right: 39, down: 40,
+    // spacebar: 32, pageup: 33, pagedown: 34, end: 35, home: 36
+    const keys = {37: 1, 38: 1, 39: 1, 40: 1, 32: 1, 33: 1, 34: 1, 35: 1, 36: 1};
+    if (keys[e.keyCode]) {
+        _preventDefaultScroll(e);
+        return false;
+    }
+  }
+
+  function _disableScroll() {
+    if (window.addEventListener){
+      window.addEventListener('scroll', _preventDefaultScroll, false);
+    }  
+    window.onwheel = _preventDefaultScroll; // modern standard
+    window.onmousewheel = document.onmousewheel = _preventDefaultScroll; // older browsers, IE
+    window.ontouchmove  = _preventDefaultScroll; // mobile
+    document.onkeydown  = _preventDefaultForScrollKeys;
+  }
+
+  function _enableScroll() {
+      if (window.removeEventListener){
+        window.removeEventListener('scroll', _preventDefaultScroll, false);
+      }
+      window.onmousewheel = document.onmousewheel = null; 
+      window.onwheel = null; 
+      window.ontouchmove = null;  
+      document.onkeydown = null;
+  }
+
+  function _scrollLightboxContent(lightboxContent){
+    const enableScrollEvents = ['mouseover', 'keydown', 'click', 'touchstart', 'touchmove']
+    const disableScrollEvents = ['mouseout', 'touchend']
+
+    enableScrollEvents.forEach(event => {
+      lightboxContent.addEventListener(event, function () {
+        _enableScroll()
+      })
+    })
+
+    disableScrollEvents.forEach(event => {
+      lightboxContent.addEventListener(event, function () {
+        _disableScroll()
+      })
+    })
   }
 
   //API Methods
@@ -285,7 +367,7 @@
   }
 
   function _setApiFooterContent (html) {
-    FooterContent = html
+    footerContent = html
   }
 
   return {
